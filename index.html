@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>India Satellite Route Planner</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-panel: rgba(255, 255, 255, 0.92);
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --input-bg: #f8fafc;
+            --primary: #0f172a; 
+            --primary-hover: #334155;
+            --accent: #10b981; 
+            --route-color: #00e5ff; 
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            position: relative;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Modern Floating Panel */
+        .panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: calc(100% - 40px);
+            max-width: 380px;
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        /* Drag Handle for Mobile */
+        .drag-handle {
+            display: none;
+            width: 40px;
+            height: 5px;
+            background: #cbd5e1;
+            border-radius: 10px;
+            margin: -10px auto 15px auto;
+            cursor: pointer;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding-bottom: 5px;
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .toggle-icon {
+            display: none;
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            transition: transform 0.3s ease;
+        }
+
+        /* Hidden Input Form State */
+        .input-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 16px;
+            overflow: hidden;
+            transition: max-height 0.4s ease, opacity 0.3s ease, margin-top 0.3s ease;
+            max-height: 600px;
+            opacity: 1;
+        }
+
+        /* Collapsed State Class */
+        .panel.minimized .input-form {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+            pointer-events: none;
+        }
+
+        .panel.minimized .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-row .input-group { flex: 1; }
+
+        label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select {
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background-color: var(--input-bg);
+            font-size: 0.95rem;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.2s ease;
+            appearance: none;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--text-main);
+            background-color: #fff;
+        }
+
+        button.primary-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+        }
+
+        button.primary-btn:active {
+            transform: scale(0.98);
+        }
+
+        button.primary-btn:disabled {
+            background-color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        /* Results Grid */
+        .results {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 16px;
+            padding-bottom: 5px;
+        }
+
+        .stat-box {
+            background: var(--input-bg);
+            padding: 12px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .stat-box.highlight {
+            background: #ecfdf5;
+            grid-column: span 2;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-box.highlight .stat-label, 
+        .stat-box.highlight .stat-value {
+            color: var(--accent);
+        }
+
+        .stat-box.highlight .stat-value {
+            font-size: 1.4rem;
+        }
+
+        .error {
+            color: #ef4444;
+            font-size: 0.85rem;
+            background: #fef2f2;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+            margin-top: 10px;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            .panel {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                max-width: 100%;
+                border-radius: 24px 24px 0 0;
+                padding: 20px;
+                padding-bottom: 30px; /* Safe area padding */
+                box-shadow: 0 -5px 40px rgba(0, 0, 0, 0.3);
+            }
+            .drag-handle { display: block; }
+            .toggle-icon { display: block; }
+            
+            /* Give Leaflet controls some breathing room on mobile */
+            .leaflet-control-zoom {
+                margin-top: 40px !important;
+                margin-right: 10px !important;
+                border: none !important;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="panel" id="uiPanel">
+        <div class="drag-handle" id="headerToggle"></div>
+        <div class="header" id="headerClick">
+            <div>
+                <h1>YatraBudget.AI</h1>
+                <p>Made with 💗 by Satya Prakash Samal</p>
+            </div>
+            <div class="toggle-icon">▼</div>
+        </div>
+        
+        <div id="errorMsg" class="error"></div>
+
+        <!-- Results appear up top so they are visible when collapsed -->
+        <div id="results" class="results">
+            <div class="stat-box highlight">
+                <span class="stat-label">Est. Budget</span>
+                <span class="stat-value">₹<span id="resCost">0</span></span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Distance</span>
+                <span class="stat-value"><span id="resDistance">0</span> km</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Duration</span>
+                <span class="stat-value" id="resTime">0</span>
+            </div>
+        </div>
+
+        <div class="input-form" id="inputForm">
+            <div class="input-group">
+                <label>From</label>
+                <input type="text" id="start" placeholder="e.g., Bengaluru" required>
+            </div>
+
+            <div class="input-group">
+                <label>To</label>
+                <input type="text" id="destination" placeholder="e.g., Mysuru" required>
+            </div>
+
+            <div class="input-row">
+                <div class="input-group">
+                    <label>Transport</label>
+                    <select id="mode">
+                        <option value="driving">Car</option>
+                        <option value="cycling">Bike</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Mileage (kmpl)</label>
+                    <input type="number" id="mileage" placeholder="18" step="0.1" min="0.1" required>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Fuel Price (₹ / Litre)</label>
+                <input type="number" id="fuelPrice" placeholder="101.94" step="0.01" min="0" required>
+            </div>
+
+            <button id="calculateBtn" class="primary-btn">Calculate Trip</button>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // UI Interaction for Mobile Panel
+        const panel = document.getElementById('uiPanel');
+        const headerClick = document.getElementById('headerClick');
+        const headerToggle = document.getElementById('headerToggle');
+        
+        const togglePanel = () => {
+            // Only allow toggle if on mobile or if results exist
+            if (window.innerWidth <= 600 || document.getElementById('results').style.display === 'grid') {
+                panel.classList.toggle('minimized');
+            }
+        };
+
+        headerClick.addEventListener('click', togglePanel);
+        headerToggle.addEventListener('click', togglePanel);
+
+        // Map Setup
+        const indiaBounds = [[6.5, 68.1], [35.5, 97.4]];
+        const map = L.map('map', {
+            center: [20.5937, 78.9629],
+            zoom: 5,
+            minZoom: 5,
+            maxBounds: indiaBounds,
+            maxBoundsViscosity: 1.0,
+            zoomControl: false 
+        });
+
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS'
+        }).addTo(map);
+
+        let startMarker, endMarker, routePolyline;
+
+        const createMarkerIcon = (color) => {
+            return L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: ${color}; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.8);"></div>`,
+                iconSize: [18, 18],
+                iconAnchor: [9, 9]
+            });
+        };
+
+        document.getElementById('calculateBtn').addEventListener('click', async () => {
+            const startLoc = document.getElementById('start').value.trim();
+            const destLoc = document.getElementById('destination').value.trim();
+            const mode = document.getElementById('mode').value;
+            const fuelPrice = parseFloat(document.getElementById('fuelPrice').value);
+            const mileage = parseFloat(document.getElementById('mileage').value);
+
+            const btn = document.getElementById('calculateBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            const resultsDiv = document.getElementById('results');
+
+            if (!startLoc || !destLoc || isNaN(fuelPrice) || isNaN(mileage)) {
+                showError("Please fill all fields with valid data.");
+                return;
+            }
+
+            try {
+                btn.innerText = "Calculating...";
+                btn.disabled = true;
+                errorMsg.style.display = "none";
+
+                const startCoords = await getCoordinates(startLoc);
+                const destCoords = await getCoordinates(destLoc);
+                const routeData = await getRoute(startCoords, destCoords, mode);
+
+                const distanceKm = routeData.distance / 1000; 
+                const durationMins = Math.round(routeData.duration / 60); 
+                const fuelNeeded = distanceKm / mileage;
+                const totalCost = fuelNeeded * fuelPrice;
+
+                document.getElementById('resDistance').innerText = distanceKm.toFixed(1);
+                document.getElementById('resTime').innerText = formatTime(durationMins);
+                document.getElementById('resCost').innerText = totalCost.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                
+                resultsDiv.style.display = "grid";
+
+                drawRouteOnMap(startCoords, destCoords, routeData.geometry);
+
+                // Auto-collapse panel on Mobile to show the beautiful map
+                if (window.innerWidth <= 600) {
+                    panel.classList.add('minimized');
+                }
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                btn.innerText = "Calculate Trip";
+                btn.disabled = false;
+            }
+        });
+
+        async function getCoordinates(query) {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=in`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.length === 0) throw new Error(`Could not find "${query}" in India.`);
+            return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+        }
+
+        async function getRoute(start, end, profile) {
+            const coords = `${start[0]},${start[1]};${end[0]},${end[1]}`;
+            const url = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.code !== "Ok") throw new Error("Could not calculate road route.");
+            return data.routes[0];
+        }
+
+        function drawRouteOnMap(startCoords, destCoords, geojsonGeometry) {
+            if (startMarker) map.removeLayer(startMarker);
+            if (endMarker) map.removeLayer(endMarker);
+            if (routePolyline) map.removeLayer(routePolyline);
+
+            const startLatLon = [startCoords[1], startCoords[0]];
+            const destLatLon = [destCoords[1], destCoords[0]];
+
+            startMarker = L.marker(startLatLon, { icon: createMarkerIcon('#10b981') }).addTo(map);
+            endMarker = L.marker(destLatLon, { icon: createMarkerIcon('#ef4444') }).addTo(map);
+
+            routePolyline = L.geoJSON(geojsonGeometry, {
+                style: {
+                    color: 'var(--route-color)',
+                    weight: 6,
+                    opacity: 1,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }
+            }).addTo(map);
+
+            // Pad the map view so the bottom UI panel doesn't cover the route
+            const isMobile = window.innerWidth <= 600;
+            map.flyToBounds(routePolyline.getBounds(), { 
+                paddingTopLeft: [50, 50],
+                paddingBottomRight: [50, isMobile ? 180 : 50], 
+                duration: 1.5 
+            });
+        }
+
+        function formatTime(minutes) {
+            if (minutes < 60) return `${minutes}m`;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMsg');
+            errorDiv.innerText = message;
+            errorDiv.style.display = "block";
+            // Expand panel if showing error
+            panel.classList.remove('minimized');
+        }
+    </script>
+</body>
+</html>
